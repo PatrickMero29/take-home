@@ -1,0 +1,85 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "federated-identity-take-home"
+version = "0.0.1"
+description = "A phased, security-focused OIDC federation built with FastAPI."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "Authlib>=1.8.0,<2",
+  "alembic>=1.16,<2",
+  "argon2-cffi>=25.1,<26",
+  "asyncpg>=0.30,<1",
+  "cryptography>=45.0.1,<51",
+  "fastapi>=0.118,<1",
+  "httpx2>=2.13.1,<3",
+  "joserfc>=1.6.8,<2",
+  "pydantic>=2.11,<3",
+  "pydantic-settings>=2.10,<3",
+  "pyotp>=2.10,<3",
+  "sqlalchemy[asyncio]>=2.0.43,<2.1",
+  "uvicorn>=0.35,<1",
+]
+
+[dependency-groups]
+dev = [
+  "mypy>=1.18,<2",
+  "pip-audit>=2.9,<3",
+  "playwright>=1.55,<2",
+  "pytest>=8.4,<10",
+  "pytest-asyncio>=1.2,<2",
+  "ruff>=0.12,<1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/federated_identity"]
+
+[tool.hatch.build.targets.wheel.force-include]
+migrations = "federated_identity/migrations"
+"ops/postgres/pg_hba.conf" = "federated_identity/resources/pg_hba.conf"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = ["error"]
+markers = ["integration: requires PostgreSQL server binaries for a disposable test cluster"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "RUF"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src", "tests"]
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["authlib.*", "asyncpg"]
+ignore_missing_imports = true
+
+# Authlib's provider classes have no typing metadata. The exception is confined
+# to the adapter; the API, service, and persistence interfaces remain strict.
+[[tool.mypy.overrides]]
+module = [
+  "federated_identity.idp.protocol.authlib_adapter",
+  "federated_identity.sp.protocol.oidc",
+  "federated_identity.common.security.oidc",
+]
+disallow_subclassing_any = false
+disallow_untyped_calls = false
+
+[tool.pydantic-mypy]
+init_typed = true
+warn_required_dynamic_aliases = true
+
+[project.scripts]
+federation-phase0 = "federated_identity.cli.phase0:main"
+federationctl = "federated_identity.cli.main:main"

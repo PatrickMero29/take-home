@@ -1,0 +1,15 @@
+.git
+.venv
+.local
+.secrets
+.env
+.env.*
+__pycache__
+.pytest_cache
+.mypy_cache
+.ruff_cache
+tests
+docs
+*.pem
+*.key
+*.crt

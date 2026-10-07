@@ -1,0 +1,1 @@
+"""SP-owned persistence."""

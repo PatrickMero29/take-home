@@ -1,0 +1,1 @@
+"""SP HTTP application boundaries."""

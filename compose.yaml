@@ -1,0 +1,152 @@
+name: federated-identity
+
+x-application: &application
+  image: federated-identity:local
+  build: .
+  restart: unless-stopped
+  init: true
+  read_only: true
+  tmpfs:
+    - /tmp:mode=1777
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  depends_on:
+    initialize-databases:
+      condition: service_completed_successfully
+  healthcheck:
+    test: [CMD, /app/.venv/bin/federationctl, healthcheck]
+    interval: 10s
+    timeout: 5s
+    retries: 5
+    start_period: 15s
+
+x-environment: &environment
+  FID_ISSUER: https://idp.localhost:8443
+  FID_DATABASE_HOST: postgres
+  FID_DATABASE_PORT: "5432"
+  FID_SECRETS_DIRECTORY: /run/federation
+
+services:
+  bootstrap-assets:
+    image: federated-identity:local
+    build: .
+    user: "0:0"
+    restart: "no"
+    command: [bootstrap-assets, --app-uid, "10001", --postgres-uid, "999"]
+    volumes:
+      - authority:/state/authority
+      - postgres-secrets:/state/postgres
+      - idp-secrets:/state/idp
+      - sp-a-secrets:/state/sp-a
+      - sp-b-secrets:/state/sp-b
+      - sp-c-secrets:/state/sp-c
+    network_mode: none
+
+  postgres:
+    image: postgres:16.15-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fid_admin
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD_FILE: /run/federation/admin.password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    command:
+      - postgres
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/run/federation/server.crt
+      - -c
+      - ssl_key_file=/run/federation/server.key
+      - -c
+      - hba_file=/etc/federation/pg_hba.conf
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - postgres-secrets:/run/federation:ro
+      - ./ops/postgres/pg_hba.conf:/etc/federation/pg_hba.conf:ro
+    depends_on:
+      bootstrap-assets:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U fid_admin -d postgres]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  initialize-databases:
+    image: federated-identity:local
+    build: .
+    user: "0:0"
+    restart: "no"
+    command: [initialize-databases]
+    volumes:
+      - postgres-secrets:/state/postgres:ro
+      - idp-secrets:/state/idp:ro
+      - sp-a-secrets:/state/sp-a:ro
+      - sp-b-secrets:/state/sp-b:ro
+      - sp-c-secrets:/state/sp-c:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  idp:
+    <<: *application
+    environment:
+      <<: *environment
+      FID_SERVICE_ID: idp
+      FID_PUBLIC_URL: https://idp.localhost:8443
+      FID_LISTEN_PORT: "8443"
+    ports: ["127.0.0.1:8443:8443"]
+    volumes: ["idp-secrets:/run/federation:ro"]
+    networks:
+      default:
+        aliases: [idp.localhost]
+
+  sp-a:
+    <<: *application
+    environment:
+      <<: *environment
+      FID_SERVICE_ID: sp-a
+      FID_PUBLIC_URL: https://sp-a.localhost:8444
+      FID_LISTEN_PORT: "8444"
+    ports: ["127.0.0.1:8444:8444"]
+    volumes: ["sp-a-secrets:/run/federation:ro"]
+    networks:
+      default:
+        aliases: [sp-a.localhost]
+
+  sp-b:
+    <<: *application
+    environment:
+      <<: *environment
+      FID_SERVICE_ID: sp-b
+      FID_PUBLIC_URL: https://sp-b.localhost:8445
+      FID_LISTEN_PORT: "8445"
+    ports: ["127.0.0.1:8445:8445"]
+    volumes: ["sp-b-secrets:/run/federation:ro"]
+    networks:
+      default:
+        aliases: [sp-b.localhost]
+
+  sp-c:
+    <<: *application
+    profiles: [onboarding]
+    environment:
+      <<: *environment
+      FID_SERVICE_ID: sp-c
+      FID_PUBLIC_URL: https://sp-c.localhost:8446
+      FID_LISTEN_PORT: "8446"
+    ports: ["127.0.0.1:8446:8446"]
+    volumes: ["sp-c-secrets:/run/federation:ro"]
+    networks:
+      default:
+        aliases: [sp-c.localhost]
+
+volumes:
+  authority:
+  postgres-data:
+  postgres-secrets:
+  idp-secrets:
+  sp-a-secrets:
+  sp-b-secrets:
+  sp-c-secrets:
