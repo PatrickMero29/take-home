@@ -1,0 +1,52 @@
+name: Architecture verification
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.12.23"
+          python-version: "3.12"
+      - run: uv sync --frozen
+      - run: sudo apt-get update && sudo apt-get install -y postgresql-16 libnss3-tools
+      - run: uv run playwright install --with-deps chromium
+      - run: make check
+      - run: uv run pytest -q
+      - name: Build distributable runtime wheel
+        run: uv build --wheel
+      - name: Verify installed wheel outside checkout
+        working-directory: /tmp
+        run: uv run --isolated --no-project --with "$GITHUB_WORKSPACE/dist/federated_identity_take_home-0.0.1-py3-none-any.whl" federation-phase0
+      - name: Verify installed credential-backed SSO outside checkout
+        working-directory: /tmp
+        run: uv run --isolated --no-project --with "$GITHUB_WORKSPACE/dist/federated_identity_take_home-0.0.1-py3-none-any.whl" federationctl verify-login
+      - name: Audit locked runtime dependencies
+        shell: bash
+        run: |
+          set -o pipefail
+          uv export --frozen --no-dev --no-emit-project --format requirements-txt | uv run pip-audit --disable-pip --require-hashes -r /dev/stdin
+      - run: docker compose config --quiet
+
+  compose:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose up --build --wait idp sp-a sp-b
+      - name: Verified per-service health checks
+        run: |
+          docker compose exec -T idp /app/.venv/bin/federationctl healthcheck
+          docker compose exec -T sp-a /app/.venv/bin/federationctl healthcheck
+          docker compose exec -T sp-b /app/.venv/bin/federationctl healthcheck
+      - name: Stop isolated CI deployment
+        if: always()
+        run: docker compose down --volumes
