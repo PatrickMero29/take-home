@@ -1,7 +1,6 @@
 # Target architecture setup
 
-The build order is **target architecture → shared security model → Phase 0 and
-feature implementation**. Phase 0 now runs on this topology and canonical model.
+The build order is **target architecture → shared security model → Phases 0-11 (10 Excluded) → Boiler plate
 
 ## Installed topology
 
@@ -140,3 +139,5 @@ logout across application/infrastructure restart. The current isolated wheel
 passes both fresh login/protocol probes outside the checkout. Docker is unavailable
 in the local WSL distro, so configured Compose CI and local process evidence are
 explicitly distinguished; no local container startup success is claimed.
+
+Final uv run pytest -q 569 passed in 2028.76s (0:33:48)
