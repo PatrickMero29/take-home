@@ -1,0 +1,10 @@
+# Recording-only overlay. Use with compose.yaml and -p federation-demo.
+# Slows logout retry so a stopped SP stays visibly pending. Trust checks are unchanged.
+# Do not raise the base above 60: RuntimeSettings rejects it and the IDP will not start.
+# Access lifetime 600 is inside the 1–900 second policy bound.
+services:
+  idp:
+    environment:
+      FID_POLICY: '{"access_token_ttl_seconds":600}'
+      FID_LOGOUT_RETRY_BASE_SECONDS: "60"
+      FID_LOGOUT_RETRY_MAX_SECONDS: "120"
